@@ -1,0 +1,20 @@
+{
+  "id": "desert",
+  "name": "Desert",
+  "palette": {
+    "background": "#1b1713",
+    "surface": "#2b221d",
+    "secondarySurface": "#382d29",
+    "primaryText": "#f8f3ea",
+    "secondaryText": "#e7d9c6",
+    "mutedText": "#d0b899",
+    "border": "#5d483d",
+    "accent": "#f4b267",
+    "accentForeground": "#3b2a1d",
+    "selected": "#f59e0b",
+    "hover": "#48382f",
+    "success": "#7dd3a5",
+    "warning": "#fcd34d",
+    "error": "#fca5a5"
+  }
+}

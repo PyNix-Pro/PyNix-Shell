@@ -1,0 +1,20 @@
+{
+  "id": "material-you",
+  "name": "Material You",
+  "palette": {
+    "background": "#0d1117",
+    "surface": "#121821",
+    "secondarySurface": "#1a2330",
+    "primaryText": "#f3f5f7",
+    "secondaryText": "#bfc8d4",
+    "mutedText": "#8d98a8",
+    "border": "#2d3947",
+    "accent": "#7ba8ff",
+    "accentForeground": "#ebf2ff",
+    "selected": "#3d6ee8",
+    "hover": "#273447",
+    "success": "#64d39d",
+    "warning": "#e9c574",
+    "error": "#f08a8a"
+  }
+}

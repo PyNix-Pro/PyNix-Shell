@@ -1,0 +1,20 @@
+{
+  "id": "ocean",
+  "name": "Ocean",
+  "palette": {
+    "background": "#071a20",
+    "surface": "#0c2732",
+    "secondarySurface": "#123a45",
+    "primaryText": "#ecfeff",
+    "secondaryText": "#cffafe",
+    "mutedText": "#a5f3fc",
+    "border": "#1f4f5c",
+    "accent": "#5eead4",
+    "accentForeground": "#042f2e",
+    "selected": "#2dd4bf",
+    "hover": "#123f4a",
+    "success": "#34d399",
+    "warning": "#fbbf24",
+    "error": "#fda4af"
+  }
+}

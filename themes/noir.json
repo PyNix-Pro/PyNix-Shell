@@ -1,0 +1,20 @@
+{
+  "id": "noir",
+  "name": "Noir",
+  "palette": {
+    "background": "#0b0b0d",
+    "surface": "#121316",
+    "secondarySurface": "#191c21",
+    "primaryText": "#f4f4f5",
+    "secondaryText": "#d4d4d8",
+    "mutedText": "#a1a1aa",
+    "border": "#2a2a2d",
+    "accent": "#d4d4d8",
+    "accentForeground": "#171717",
+    "selected": "#f5f5f5",
+    "hover": "#1f2126",
+    "success": "#a7f3d0",
+    "warning": "#fde68a",
+    "error": "#fca5a5"
+  }
+}

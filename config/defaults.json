@@ -1,0 +1,60 @@
+{
+  "theme": "material-you",
+  "island": {
+    "compactWidth": 208,
+    "compactHeight": 50,
+    "expandedWidth": 390,
+    "expandedHeight": 204,
+    "topOffset": 8,
+    "radius": 26,
+    "padding": 16,
+    "spacing": 12,
+    "showStatusIndicators": true,
+    "statusIndicatorOrder": ["network", "bluetooth", "audio", "battery"],
+    "statusIndicatorVisibility": {
+      "network": true,
+      "bluetooth": true,
+      "audio": true,
+      "battery": true
+    },
+    "showAlbumArt": true,
+    "albumArtSize": 64,
+    "hoverLift": true
+  },
+  "clock": {
+    "showClock": true,
+    "timeFormat": "HH:mm",
+    "showDate": false,
+    "dateFormat": "ddd, d MMM"
+  },
+  "motion": {
+    "animationsEnabled": true,
+    "reducedMotion": false,
+    "lowPerformance": false,
+    "islandDuration": 220,
+    "panelDuration": 180
+  },
+  "launcher": {
+    "width": 540,
+    "maxResults": 7
+  },
+  "notifications": {
+    "maxVisible": 5
+  },
+  "controlCenter": {
+    "width": 420,
+    "height": 520,
+    "radius": 28,
+    "preset": "Balanced",
+    "tiles": [
+      { "id": "audio", "size": "normal", "gridColumn": 0, "gridRow": 0 },
+      { "id": "media", "size": "normal", "gridColumn": 0, "gridRow": 1 },
+      { "id": "appearance", "size": "normal", "gridColumn": 0, "gridRow": 2 },
+      { "id": "motion", "size": "normal", "gridColumn": 0, "gridRow": 3 },
+      { "id": "wifi", "size": "normal", "gridColumn": 0, "gridRow": 4 },
+      { "id": "bluetooth", "size": "normal", "gridColumn": 0, "gridRow": 5 },
+      { "id": "brightness", "size": "normal", "gridColumn": 0, "gridRow": 6 },
+      { "id": "notifications", "size": "normal", "gridColumn": 0, "gridRow": 7 }
+    ]
+  }
+}

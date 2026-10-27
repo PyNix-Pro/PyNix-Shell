@@ -1,0 +1,20 @@
+{
+  "id": "nightfox",
+  "name": "Nightfox",
+  "palette": {
+    "background": "#111827",
+    "surface": "#162131",
+    "secondarySurface": "#1d2b3d",
+    "primaryText": "#e5e7eb",
+    "secondaryText": "#cbd5e1",
+    "mutedText": "#94a3b8",
+    "border": "#2d3a4d",
+    "accent": "#7dd3fc",
+    "accentForeground": "#ecfeff",
+    "selected": "#38bdf8",
+    "hover": "#1e2f44",
+    "success": "#86efac",
+    "warning": "#facc15",
+    "error": "#fda4af"
+  }
+}
