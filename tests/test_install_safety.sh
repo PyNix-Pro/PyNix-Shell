@@ -111,9 +111,118 @@ fi
 banner="$(print_banner)"
 [[ "$banner" == *"P Y N I X   S H E L L"* ]]
 
+(
+  pynix_yes_to_all=0
+  confirm_installation <<< "yesforall" > "$tmp_dir/initial-confirm-output"
+  output="$(<"$tmp_dir/initial-confirm-output")"
+  [[ "$output" == *"[Y,n,yesforall]:"* ]]
+  [[ "$output" == *"Y approves this action"* ]]
+  [[ "$output" == *"yesforall approves this and subsequent eligible routine installation actions"* ]]
+  [[ "$pynix_yes_to_all" -eq 1 ]]
+)
+(
+  pynix_yes_to_all=0
+  STARTUP_MODE="ask"
+  KEYBINDINGS_MODE="no"
+  if ask_startup <<< $'yesforall\ny'; then
+    [[ "$pynix_yes_to_all" -eq 0 ]]
+  else
+    printf 'Expected explicit y to approve startup after yesforall was rejected.\n' >&2
+    exit 1
+  fi
+)
+
+(
+  pynix_yes_to_all=0
+  confirm <<< $'yesforall\ny' > "$tmp_dir/explicit-confirm-output" 2>&1
+  output="$(<"$tmp_dir/explicit-confirm-output")"
+  [[ "$output" == *"yesforall cannot approve this separately confirmed action"* ]]
+  [[ "$output" == *"[Y,n,yesforall]:"* ]]
+  [[ "$pynix_yes_to_all" -eq 0 ]]
+)
+(
+  pynix_yes_to_all=1
+  if confirm_optional_removal "test settings" <<< $'yesforall\nn' > "$tmp_dir/destructive-confirm-output" 2>&1; then
+    printf 'Expected explicit n to decline optional removal.\n' >&2
+    exit 1
+  fi
+  output="$(<"$tmp_dir/destructive-confirm-output")"
+  [[ "$output" == *"yesforall cannot approve this separately confirmed action"* ]]
+  [[ "$pynix_yes_to_all" -eq 1 ]]
+)
+
+for response in y YES; do
+  pynix_yes_to_all=0
+  pynix_confirm "accept test" no <<< "$response"
+done
+for response in n NO; do
+  pynix_yes_to_all=0
+  if pynix_confirm "decline test" yes <<< "$response"; then
+    printf 'Expected %s to decline.\n' "$response" >&2
+    exit 1
+  fi
+done
+pynix_yes_to_all=0
+output="$(pynix_confirm "retry test" no 2>&1 <<< $'invalid\nY')"
+[[ "$output" == *"Invalid choice"* ]]
+[[ "$output" == *"[Y,n,yesforall]:"* ]]
+pynix_yes_to_all=0
+if pynix_confirm "empty response test" yes </dev/null; then
+  printf 'EOF must not approve a confirmation.\n' >&2
+  exit 1
+fi
+pynix_yes_to_all=0
+output="$(pynix_confirm "empty retry test" no 2>&1 <<< $'\ny')"
+[[ "$output" == *"empty response is not approval"* ]]
+
+(
+  source "$ROOT/scripts/install-safety.sh"
+  [[ "$pynix_yes_to_all" -eq 0 ]]
+)
+
+mock_bin="$tmp_dir/mock-bin"
+fresh_xdg="$tmp_dir/fresh-xdg"
+mkdir "$mock_bin"
+cat > "$mock_bin/Hyprland" <<'MOCK'
+#!/usr/bin/env bash
+printf 'Hyprland 0.55.1\n'
+MOCK
+cat > "$mock_bin/foot" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
+chmod +x "$mock_bin/Hyprland" "$mock_bin/foot"
+(
+  export PATH="$mock_bin:/usr/bin:/bin"
+  export XDG_CONFIG_HOME="$fresh_xdg"
+  HYPRLAND_CONFIG_OVERRIDE=""
+  detect_hyprland_config
+  [[ "$DETECTED_FORMAT" == "lua" ]]
+  [[ "$DETECTED_CONFIG" == "$fresh_xdg/hypr/hyprland.lua" ]]
+  [[ "$DETECTED_CONFIG_CREATED" -eq 1 ]]
+  choose_default_terminal
+  [[ "$DEFAULT_TERMINAL" == "$mock_bin/foot" ]]
+  [[ ! -e "$fresh_xdg/hypr" ]]
+)
+
+state_test_dir="$tmp_dir/state-config"
+mkdir -p "$state_test_dir"
+state_digest="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+write_hyprland_target_state "$state_test_dir" "$tmp_dir/config/hypr/hyprland.lua" generated "$state_digest"
+read_hyprland_target_state "$state_test_dir/.pynix-shell-hyprland-target"
+[[ "$PRIOR_HYPRLAND_KIND" == "generated" ]]
+[[ "$PRIOR_HYPRLAND_TARGET" == "$tmp_dir/config/hypr/hyprland.lua" ]]
+[[ "$PRIOR_GENERATED_DIGEST" == "$state_digest" ]]
+write_hyprland_target_state "$state_test_dir" "$tmp_dir/config/hypr/hyprland.conf" existing ""
+read_hyprland_target_state "$state_test_dir/.pynix-shell-hyprland-target"
+[[ "$PRIOR_HYPRLAND_KIND" == "existing" ]]
+[[ "$PRIOR_HYPRLAND_TARGET" == "$tmp_dir/config/hypr/hyprland.conf" ]]
+remove_hyprland_integration "$state_test_dir" >/dev/null
+
 mock_installed_packages=""
 mock_repository_packages="python quickshell hyprland"
 mock_sudo_calls=0
+mock_sudo_fail=0
 pacman() {
   case "${1:-}" in
     -Q)
@@ -128,6 +237,10 @@ pacman() {
       mock_sudo_calls=$((mock_sudo_calls + 1))
       local requested
       for requested in "$@"; do
+        if [[ "$mock_sudo_fail" -eq 1 ]]; then
+          printf 'mock pacman failure for %s\n' "$requested" >&2
+          return 23
+        fi
         mock_installed_packages+=" $requested"
       done
       ;;
@@ -157,7 +270,7 @@ install_missing_packages quickshell <<< "Y" >/dev/null
 mock_installed_packages=""
 mock_sudo_calls=0
 pynix_yes_to_all=0
-install_missing_packages quickshell <<< "A" >/dev/null
+install_missing_packages quickshell <<< "YESFORALL" >/dev/null
 install_missing_packages python >/dev/null
 [[ "$pynix_yes_to_all" -eq 1 ]]
 [[ "$mock_sudo_calls" -eq 2 ]]
@@ -188,16 +301,51 @@ if (
 fi
 
 pynix_yes_to_all=0
-declined_action=0
-if pynix_confirm_routine "decline test" <<< "N"; then
-  declined_action=1
+mock_installed_packages=""
+mock_sudo_calls=0
+dependent_action=0
+if install_missing_packages quickshell <<< "NO" >/dev/null 2>&1; then
+  dependent_action=1
 fi
-[[ "$declined_action" -eq 0 ]]
+[[ "$dependent_action" -eq 0 ]]
+[[ "$mock_sudo_calls" -eq 0 ]]
 
 pynix_yes_to_all=0
-pynix_confirm_routine "approve all test" <<< "A"
+pynix_confirm_routine "approve all test" <<< "YESFORALL"
 [[ "$pynix_yes_to_all" -eq 1 ]]
-pynix_confirm_routine "subsequent routine action"
+output="$(pynix_confirm_routine "subsequent routine action")"
+[[ "$output" == *"Approved by yesforall"* ]]
+
+mock_installed_packages=""
+mock_repository_packages="python quickshell hyprland"
+mock_sudo_calls=0
+mock_sudo_fail=1
+pynix_yes_to_all=0
+if install_missing_packages quickshell <<< "yesforall" > "$tmp_dir/failed-package-output" 2>&1; then
+  printf 'Expected failed package command to stop after yesforall.\n' >&2
+  exit 1
+fi
+output="$(<"$tmp_dir/failed-package-output")"
+[[ "$pynix_yes_to_all" -eq 1 ]]
+[[ "$output" == *"pacman did not install the required packages"* ]]
+[[ "$mock_installed_packages" != *"quickshell"* ]]
+mock_sudo_fail=0
+
+pynix_yes_to_all=1
+expect_refusal "yesforall bypassing unsupported OS" pynix_validate_arch_os "$tmp_dir/unsupported-os-release"
+expect_refusal "yesforall bypassing unsupported architecture" pynix_validate_architecture aarch64
+mock_uid=0
+expect_refusal "yesforall bypassing root execution" pynix_require_non_root
+mock_uid=1000
+if (
+  HOME="$tmp_dir/home"
+  XDG_CONFIG_HOME="relative-config"
+  export HOME XDG_CONFIG_HOME
+  pynix_validate_user_paths
+) >/dev/null 2>&1; then
+  printf 'yesforall must not bypass invalid path validation.\n' >&2
+  exit 1
+fi
 
 SCRIPT_DIR="$ROOT"
 install_target="$tmp_dir/config/pynix-shell"

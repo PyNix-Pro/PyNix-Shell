@@ -1346,7 +1346,11 @@ Explain the exact package operations and request approval. For approved required
 
 Use privileged access only for the particular package operation that needs it; never run the entire installer as root.
 
-Provide Y, N, and A (Yes to All) choices for eligible routine operations. A must not bypass operating-system, architecture, path, dependency, user, safety, or essential confirmation checks.
+Provide `[Y,n,yesforall]:` choices for eligible routine operations. `yesforall`
+approves the current action and subsequent eligible installation actions only
+for this run. Empty input and EOF decline; invalid input is re-prompted.
+Separate consequential Hyprland edits and destructive uninstaller actions
+require explicit confirmation and cannot be auto-approved by `yesforall`.
 
 Do not run an unnecessary full-system upgrade.
 
@@ -1381,6 +1385,14 @@ Prefer a dedicated managed configuration snippet or a clearly identifiable manag
 Avoid duplicate entries on repeated installation.
 
 Make integration reversible.
+
+**Clean-install behavior:** if the selected XDG Hyprland directory has no
+`hyprland.lua` or `hyprland.conf`, the helper selects the version-appropriate
+filename, creates a small terminal/exit starter config plus the managed
+startup block without overwriting an appearing file, and records a base-config
+fingerprint. The uninstaller deletes that generated base only when it remains
+byte-for-byte unchanged after removing the managed block; modified configs are
+preserved. Existing config edits are backed up before integration.
 
 ## 74. Post-install verification
 Verify expected files and permissions.

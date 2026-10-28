@@ -327,11 +327,11 @@ assert "for dir in assets config themes services src hyprland scripts tests; do"
 assert 'for entry in README.md BUILD_SPEC.md PROGRESS.md DECISIONS.md; do' not in installer
 installer_main = installer.split("main() {", 1)[1]
 uninstaller_main = uninstaller.split("main() {", 1)[1]
-assert installer_main.index("pynix_validate_arch_os /etc/os-release") < installer_main.index("confirm ||")
+assert installer_main.index("pynix_validate_arch_os /etc/os-release") < installer_main.index("confirm_installation ||")
 assert installer_main.index("pynix_validate_arch_os /etc/os-release") < installer_main.index("mkdir -p -- \"$config_home\"")
-assert installer_main.index("pynix_report_virtualization") < installer_main.index("confirm ||")
-assert installer_main.index("pynix_validate_architecture") < installer_main.index("confirm ||")
-assert installer_main.index("pynix_validate_user_paths") < installer_main.index("confirm ||")
+assert installer_main.index("pynix_report_virtualization") < installer_main.index("confirm_installation ||")
+assert installer_main.index("pynix_validate_architecture") < installer_main.index("confirm_installation ||")
+assert installer_main.index("pynix_validate_user_paths") < installer_main.index("confirm_installation ||")
 assert "require_non_root || return 1" in installer_main
 assert uninstaller_main.index("pynix_validate_arch_os /etc/os-release") < uninstaller_main.index("confirm ||")
 assert uninstaller_main.index("pynix_validate_architecture") < uninstaller_main.index("confirm ||")
@@ -340,7 +340,11 @@ assert "pynix_require_non_root || return 1" in uninstaller_main
 assert uninstaller_main.index("pynix_validate_arch_os /etc/os-release") < uninstaller_main.index("remove_managed_files")
 assert uninstaller_main.index("pynix_report_virtualization") < uninstaller_main.index("confirm ||")
 assert 'remove_hyprland_integration "$config_dir" || return 1' in uninstaller
-assert 'python3 "$helper" remove --config "$target"' in uninstaller
+assert 'local remove_args=(remove --config "$target")' in uninstaller
+assert 'remove_args+=(--generated-sha256 "$generated_digest")' in uninstaller
+assert 'pynix-shell-hyprland-target-v2' in installer + uninstaller
+assert 'PYNIX_CONFIG_CREATED:' in (ROOT / "scripts" / "hyprland-startup.py").read_text(encoding="utf-8")
+assert 'PYNIX_GENERATED_BASE_SHA256:' in (ROOT / "scripts" / "hyprland-startup.py").read_text(encoding="utf-8")
 assert 'rm -rf -- "$backup_root"' not in uninstaller
 assert "pynix_validate_vm" not in installer + uninstaller
 install_safety = (ROOT / "scripts" / "install-safety.sh").read_text(encoding="utf-8")

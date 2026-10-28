@@ -98,9 +98,7 @@ ensure_runtime_dependencies() {
   if ! "$SCRIPT_DIR/scripts/start-shell.sh" --check-cli >/dev/null 2>&1; then
     packages+=(quickshell)
   fi
-  if ! command -v Hyprland >/dev/null 2>&1 &&
-      ! command -v start-hyprland >/dev/null 2>&1 &&
-      ! command -v hyprctl >/dev/null 2>&1; then
+  if ! command -v Hyprland >/dev/null 2>&1; then
     packages+=(hyprland)
   fi
 
@@ -111,12 +109,27 @@ ensure_runtime_dependencies() {
     return 1
   fi
   "$SCRIPT_DIR/scripts/start-shell.sh" --check-cli || return 1
-  if ! command -v Hyprland >/dev/null 2>&1 &&
-      ! command -v start-hyprland >/dev/null 2>&1 &&
-      ! command -v hyprctl >/dev/null 2>&1; then
-    printf 'Hyprland is still unavailable after dependency installation.\n' >&2
+  if ! command -v Hyprland >/dev/null 2>&1; then
+    printf 'The Hyprland executable required to validate config compatibility is still unavailable after dependency installation.\n' >&2
     return 1
   fi
+}
+
+choose_default_terminal() {
+  local candidate
+  for candidate in foot kitty alacritty wezterm konsole xfce4-terminal xterm gnome-terminal; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DEFAULT_TERMINAL="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+
+  install_missing_packages foot || return 1
+  if ! command -v foot >/dev/null 2>&1; then
+    printf 'foot is still unavailable; cannot create an operable starter configuration.\n' >&2
+    return 1
+  fi
+  DEFAULT_TERMINAL="$(command -v foot)"
 }
 
 ask_startup() {
@@ -127,7 +140,7 @@ ask_startup() {
   if [[ "$KEYBINDINGS_MODE" == "yes" ]]; then
     details="Enable PyNix Shell startup and optional key bindings in the selected Hyprland config? This edits only one managed block and backs up the original."
   fi
-  pynix_confirm_routine "$details"
+  pynix_confirm "$details" no
 }
 
 detect_hyprland_config() {
@@ -148,17 +161,19 @@ detect_hyprland_config() {
   fi
   printf 'Detected Hyprland %s config (%s) using installed version %s.\n' \
     "$DETECTED_FORMAT" "$DETECTED_CONFIG" "$DETECTED_VERSION"
+  if [[ -e "$DETECTED_CONFIG" || -L "$DETECTED_CONFIG" ]]; then
+    DETECTED_CONFIG_CREATED=0
+  else
+    DETECTED_CONFIG_CREATED=1
+  fi
 }
 
-confirm() {
+confirm_installation() {
   printf '%s\n' "Target: ${XDG_CONFIG_HOME:-$HOME/.config}/pynix-shell"
   printf '%s\n' "A uniquely named backup will be created if that directory already exists."
   printf '%s\n' "Missing required packages may be installed with pacman after a separate confirmation."
   printf '%s\n' "Hyprland startup integration requires separate approval."
-  printf '%s\n' "Continue on this supported Arch-based system? [y/N]"
-  local response
-  IFS= read -r response || return 1
-  [[ "$response" == "y" || "$response" == "Y" || "$response" == "yes" ]]
+  pynix_confirm "Continue with PyNix Shell installation?" yes yes
 }
 
 backup_existing_config() {
@@ -249,13 +264,59 @@ copy_project_files() {
 write_hyprland_target_state() {
   local config_dir="$1"
   local target="$2"
+  local kind="$3"
+  local digest="${4:-}"
   local state_file="$config_dir/.pynix-shell-hyprland-target"
   local state_tmp
   state_tmp="$(mktemp "$config_dir/.pynix-shell-target.XXXXXXXX")"
-  printf '%s\n' "$target" > "$state_tmp"
+  printf 'pynix-shell-hyprland-target-v2\n%s\n%s\n%s\n' "$kind" "$target" "$digest" > "$state_tmp"
   mv -f -- "$state_tmp" "$state_file"
   printf '%s\n' ".pynix-shell-hyprland-target" >> "$config_dir/.pynix-shell-managed-files"
   sort -u -o "$config_dir/.pynix-shell-managed-files" "$config_dir/.pynix-shell-managed-files"
+}
+
+read_hyprland_target_state() {
+  local state_file="$1"
+  local -a lines=()
+  PRIOR_HYPRLAND_KIND="existing"
+  PRIOR_HYPRLAND_TARGET=""
+  PRIOR_GENERATED_DIGEST=""
+  if [[ ! -e "$state_file" ]]; then
+    return 0
+  fi
+  if [[ -L "$state_file" || ! -f "$state_file" ]]; then
+    printf 'Refusing to read an invalid Hyprland target state file: %s\n' "$state_file" >&2
+    return 1
+  fi
+
+  mapfile -t lines < "$state_file"
+  if [[ "${lines[0]:-}" == "pynix-shell-hyprland-target-v2" ]]; then
+    if [[ "${#lines[@]}" -ne 4 ||
+          ( "${lines[1]:-}" != "existing" && "${lines[1]:-}" != "generated" ) ]]; then
+      printf 'Invalid versioned Hyprland target state; refusing to replace it.\n' >&2
+      return 1
+    fi
+    PRIOR_HYPRLAND_KIND="${lines[1]}"
+    PRIOR_HYPRLAND_TARGET="${lines[2]}"
+    PRIOR_GENERATED_DIGEST="${lines[3]}"
+    if [[ -z "$PRIOR_HYPRLAND_TARGET" || "$PRIOR_HYPRLAND_TARGET" != /* ||
+          "$PRIOR_HYPRLAND_TARGET" == *$'\n'* ]]; then
+      printf 'Invalid Hyprland config target in ownership state; refusing to replace it.\n' >&2
+      return 1
+    fi
+    if [[ "$PRIOR_HYPRLAND_KIND" == "generated" &&
+          ! "$PRIOR_GENERATED_DIGEST" =~ ^[[:xdigit:]]{64}$ ]]; then
+      printf 'Invalid generated-config fingerprint; refusing to replace it.\n' >&2
+      return 1
+    fi
+  else
+    PRIOR_HYPRLAND_TARGET="${lines[0]:-}"
+    if [[ -z "$PRIOR_HYPRLAND_TARGET" || "$PRIOR_HYPRLAND_TARGET" != /* ||
+          "$PRIOR_HYPRLAND_TARGET" == *$'\n'* ]]; then
+      printf 'Invalid Hyprland config target in ownership state; refusing to replace it.\n' >&2
+      return 1
+    fi
+  fi
 }
 
 main() {
@@ -309,7 +370,7 @@ main() {
   local config_dir="$config_home/pynix-shell"
   local backup_root="$state_home/pynix-shell/backups"
 
-  confirm || {
+  confirm_installation || {
     printf 'Installation cancelled.\n'
     return 1
   }
@@ -318,26 +379,28 @@ main() {
 
   local enable_startup=0
   local detected_format="" detected_config="" detected_version=""
+  local detected_config_created=0
+  local default_terminal=""
   if ask_startup; then
     detect_hyprland_config || return 1
     detected_format="$DETECTED_FORMAT"
     detected_config="$DETECTED_CONFIG"
     detected_version="$DETECTED_VERSION"
+    detected_config_created="$DETECTED_CONFIG_CREATED"
+    if [[ "$detected_config_created" -eq 1 ]]; then
+      choose_default_terminal || return 1
+      default_terminal="$DEFAULT_TERMINAL"
+    fi
     enable_startup=1
   else
     printf 'Automatic Hyprland startup was not selected.\n'
   fi
 
   local target_state="$config_dir/.pynix-shell-hyprland-target"
-  if [[ -L "$target_state" ]]; then
-    printf 'Refusing to read a symlinked Hyprland target state file: %s\n' "$target_state" >&2
-    return 1
-  fi
-  if [[ "$enable_startup" -eq 1 && -f "$target_state" ]]; then
-    local prior_target
-    IFS= read -r prior_target < "$target_state" || prior_target=""
-    if [[ "$prior_target" != "$detected_config" ]]; then
-      printf 'An existing managed startup entry points to %s. Remove it before changing target configs.\n' "${prior_target:-an invalid path}" >&2
+  read_hyprland_target_state "$target_state" || return 1
+  if [[ "$enable_startup" -eq 1 && -n "$PRIOR_HYPRLAND_TARGET" ]]; then
+    if [[ "$PRIOR_HYPRLAND_TARGET" != "$detected_config" ]]; then
+      printf 'An existing managed startup entry points to %s. Remove it before changing target configs.\n' "$PRIOR_HYPRLAND_TARGET" >&2
       return 1
     fi
   fi
@@ -350,16 +413,46 @@ main() {
 
   if [[ "$enable_startup" -eq 1 ]]; then
     printf 'Preparing Hyprland %s startup integration for %s.\n' "$detected_format" "$detected_config"
-    write_hyprland_target_state "$config_dir" "$detected_config"
     local startup_args=()
     if [[ "$KEYBINDINGS_MODE" == "yes" ]]; then
       startup_args+=(--keybindings)
     fi
-    python3 "$config_dir/scripts/hyprland-startup.py" install \
+    if [[ "$detected_config_created" -eq 1 ]]; then
+      startup_args+=(--terminal "$default_terminal")
+    fi
+    local integration_output generated_digest=""
+    if ! integration_output="$(python3 "$config_dir/scripts/hyprland-startup.py" install \
       --config "$detected_config" \
       --launcher "$config_dir/scripts/start-shell.sh" \
       --backup-dir "$backup_root/hyprland" \
-      "${startup_args[@]}" || return 1
+      "${startup_args[@]}")"; then
+      printf '%s\n' "$integration_output" >&2
+      return 1
+    fi
+    printf '%s\n' "$integration_output" |
+      sed -e '/^PYNIX_CONFIG_CREATED:/d' -e '/^PYNIX_GENERATED_BASE_SHA256:/d'
+    local helper_created
+    helper_created="$(printf '%s\n' "$integration_output" | sed -n 's/^PYNIX_CONFIG_CREATED://p')"
+    if [[ "$helper_created" != "0" && "$helper_created" != "1" ]]; then
+      printf 'Startup helper did not return valid config ownership information.\n' >&2
+      return 1
+    fi
+    generated_digest="$(printf '%s\n' "$integration_output" | sed -n 's/^PYNIX_GENERATED_BASE_SHA256://p')"
+    local config_kind="existing"
+    if [[ -n "$generated_digest" ]]; then
+      if [[ ! "$generated_digest" =~ ^[[:xdigit:]]{64}$ ]]; then
+        printf 'Startup helper did not return valid ownership data for its generated base config.\n' >&2
+        return 1
+      fi
+      if [[ "$helper_created" -eq 1 ||
+            ( "$PRIOR_HYPRLAND_KIND" == "generated" &&
+              "$PRIOR_GENERATED_DIGEST" == "$generated_digest" ) ]]; then
+        config_kind="generated"
+      else
+        generated_digest=""
+      fi
+    fi
+    write_hyprland_target_state "$config_dir" "$detected_config" "$config_kind" "$generated_digest"
   fi
 
   printf 'Installation complete under %s.\n' "$config_dir"

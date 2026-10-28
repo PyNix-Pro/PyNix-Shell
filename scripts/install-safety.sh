@@ -108,26 +108,50 @@ pynix_require_non_root() {
 
 pynix_yes_to_all=0
 
-pynix_confirm_routine() {
+pynix_confirm() {
   local prompt="$1"
-  if [[ "$pynix_yes_to_all" -eq 1 ]]; then
-    printf 'Approved by Yes to All: %s\n' "$prompt"
+  local yesforall_allowed="${2:-yes}"
+  local show_help="${3:-no}"
+
+  if [[ "$pynix_yes_to_all" -eq 1 && "$yesforall_allowed" == "yes" ]]; then
+    printf 'Approved by yesforall: %s\n' "$prompt"
     return 0
   fi
 
-  printf '%s [Y/n/a: yes to all] ' "$prompt"
+  if [[ "$show_help" == "yes" ]]; then
+    printf '%s\n' \
+      "Y approves this action; n declines it; yesforall approves this and subsequent eligible routine installation actions during this run."
+  fi
+
   local response
-  IFS= read -r response || response=""
-  case "${response,,}" in
-    y|yes) return 0 ;;
-    a|all)
-      pynix_yes_to_all=1
-      return 0
-      ;;
-    *)
+  while true; do
+    printf '%s [Y,n,yesforall]: ' "$prompt"
+    if ! IFS= read -r response; then
+      printf '\nNo response received; declining.\n' >&2
       return 1
-      ;;
-  esac
+    fi
+    case "${response,,}" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+      yesforall)
+        if [[ "$yesforall_allowed" == "yes" ]]; then
+          pynix_yes_to_all=1
+          return 0
+        fi
+        printf 'yesforall cannot approve this separately confirmed action; enter y or n.\n' >&2
+        ;;
+      "")
+        printf 'Please enter y, n, or yesforall; an empty response is not approval.\n' >&2
+        ;;
+      *)
+        printf 'Invalid choice. Enter y, n, or yesforall.\n' >&2
+        ;;
+    esac
+  done
+}
+
+pynix_confirm_routine() {
+  pynix_confirm "$1" yes
 }
 
 pynix_validate_user_paths() {

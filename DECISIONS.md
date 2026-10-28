@@ -42,10 +42,10 @@
 ## Startup and session lifecycle
 
 - Hyprland is launched manually by the user from a TTY; PyNix Shell starts from the compositor's startup hook, not a login profile or display-manager dependency.
-- The startup helper inspects Hyprland config contents and version, makes a backup, installs one idempotent marked block, and removes only that managed block. Preserve its existing path, symlink, and atomic-edit safety checks.
+- The startup helper inspects Hyprland config contents and version, makes a backup, installs one idempotent marked block, and removes only that managed block. If no main config exists, create a version-matched Lua/hyprlang starter config atomically with a basic terminal/exit binding and the managed shell startup. Record a digest of the generated base after removing the integration block; only delete it on uninstall when the digest still matches, otherwise preserve user edits.
 - The helper emits Lua `hl.on("hyprland.start", ...)`/`hl.exec_cmd(...)` for current Lua config and `exec-once` for supported legacy hyprlang. Optional shortcuts use documented Lua `hl.bind`/`hl.dsp.exec_cmd` calls or hyprlang `bind` lines in the same uniquely marked, backed-up block. IPC/API command forms were checked against Quickshell 0.3.2 and official Hyprland docs; live runtime parsing still requires guest validation.
 - The launcher must consume the compositor's Wayland/D-Bus/runtime environment and must not overwrite it or start another D-Bus session. Use project-specific duplicate prevention and avoid restart loops.
-- No `Hyprland`, `start-hyprland`, or `dbus-run-session Hyprland` workflow has been tested in the target guest.
+- No `Hyprland`, `start-hyprland`, or `dbus-run-session Hyprland` workflow has been tested in the target guest. The starter config uses syntax/API forms from the official Hyprland v0.55 Lua example and v0.54 hyprlang documentation.
 
 ## Installer and development boundaries
 
@@ -54,7 +54,8 @@
 - Final published installation target: Arch Linux on physical hardware or in a VM, plus compatible Arch-based distributions that satisfy required dependencies through pacman. Validate `/etc/os-release` via `ID` and `ID_LIKE`, plus architecture, paths, user, pacman/dependencies, and consent.
 - Virtualization detection is diagnostic only and cannot reject a supported physical installation. Detected containers are unsupported and may be refused because the graphical Hyprland session is not validated there.
 - The final installer may use standard sudo authentication for approved system package operations. Do not run the whole installer as root, capture sudo credentials, or allow Yes-to-All to skip safety checks.
-- The installer installs only missing required `python`, `quickshell`, and `hyprland` packages after checking configured pacman repository availability and receiving routine Y/N/A confirmation. It uses `sudo pacman -S --needed` without custom credential handling, database refresh, full upgrade, or AUR-helper bootstrap. Optional NetworkManager, BlueZ, PipeWire, brightness, and notification components are not installed or enabled. The main install/uninstall confirmation remains a separate explicit Y/N gate. Package and sudo behavior is tested with mocks only; no installer/uninstaller was executed.
+- The installer installs only missing required `python`, `quickshell`, and `hyprland` packages after checking configured pacman repository availability and receiving routine `[Y,n,yesforall]:` consent. It uses `sudo pacman -S --needed` without custom credential handling, database refresh, full upgrade, or AUR-helper bootstrap. Optional NetworkManager, BlueZ, PipeWire, brightness, and notification components are not installed or enabled. The main install/uninstall confirmation remains a separate explicit `y`/`n` gate. Package and sudo behavior is tested with mocks only; no installer/uninstaller was executed.
+- Installer confirmations share one parser and display `[Y,n,yesforall]:`. `yesforall` is case-insensitive, in-memory per process, and approves only eligible installation actions. Initial install approval may enable it for later routine dependency choices; Hyprland config edits and uninstaller/destructive cleanup require a separate explicit `y`/`n`. Empty input/EOF do not approve, invalid input is retried, and command failures still stop/report after yesforall.
 - Back up user config before edits; never replace the full Hyprland config. The uninstaller may remove only PyNix-owned files/integration and must never remove shared packages.
 
 ## Evidence and validation

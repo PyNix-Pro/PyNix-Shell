@@ -31,15 +31,12 @@ check_dependencies() {
 confirm() {
   printf '%s\n' "This removes only manifest-listed PyNix Shell application files."
   printf '%s\n' "User settings and backups are preserved unless separately confirmed."
-  printf '%s\n' "Continue on this supported Arch-based system? [y/N]"
-  local response
-  IFS= read -r response || return 1
-  [[ "$response" == "y" || "$response" == "Y" || "$response" == "yes" ]]
+  pynix_confirm "Continue with PyNix Shell uninstallation?" no yes
 }
 
 confirm_optional_removal() {
   local item="$1"
-  pynix_confirm_routine "Also remove $item?"
+  pynix_confirm "Also remove $item?" no
 }
 
 valid_managed_path() {
@@ -67,11 +64,35 @@ remove_hyprland_integration() {
     return 1
   fi
 
-  local target
-  IFS= read -r target < "$state_file" || target=""
+  local target state_kind="existing" generated_digest=""
+  local -a state_lines=()
+  mapfile -t state_lines < "$state_file"
+  if [[ "${state_lines[0]:-}" == "pynix-shell-hyprland-target-v2" ]]; then
+    if [[ "${#state_lines[@]}" -ne 4 ]]; then
+      printf 'Invalid versioned Hyprland target state at %s; refusing removal.\n' "$state_file" >&2
+      return 1
+    fi
+    state_kind="${state_lines[1]}"
+    target="${state_lines[2]}"
+    generated_digest="${state_lines[3]}"
+    if [[ "$state_kind" != "existing" && "$state_kind" != "generated" ]]; then
+      printf 'Invalid Hyprland config ownership state at %s; refusing removal.\n' "$state_file" >&2
+      return 1
+    fi
+    if [[ "$state_kind" == "generated" && ! "$generated_digest" =~ ^[[:xdigit:]]{64}$ ]]; then
+      printf 'Invalid generated-config fingerprint at %s; refusing removal.\n' "$state_file" >&2
+      return 1
+    fi
+  else
+    target="${state_lines[0]:-}"
+  fi
   if [[ -z "$target" || "$target" == *$'\n'* ]]; then
     printf 'Invalid Hyprland target path in %s; refusing removal.\n' "$state_file" >&2
     return 1
+  fi
+  if [[ ! -e "$target" && ! -L "$target" ]]; then
+    printf 'Recorded Hyprland config is already absent; no config cleanup is needed: %s\n' "$target"
+    return 0
   fi
   local helper="$config_dir/scripts/hyprland-startup.py"
   if [[ -L "$helper" ]]; then
@@ -85,7 +106,11 @@ remove_hyprland_integration() {
     printf 'Hyprland integration helper is missing or symlinked; refusing to remove project files before cleanup.\n' >&2
     return 1
   fi
-  python3 "$helper" remove --config "$target"
+  local remove_args=(remove --config "$target")
+  if [[ "$state_kind" == "generated" ]]; then
+    remove_args+=(--generated-sha256 "$generated_digest")
+  fi
+  python3 "$helper" "${remove_args[@]}"
 }
 
 remove_managed_files() {
