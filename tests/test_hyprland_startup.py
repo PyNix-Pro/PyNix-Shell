@@ -94,6 +94,8 @@ class HyprlandStartupTests(unittest.TestCase):
             self.assertTrue(created)
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
             self.assertIn(hyprland_startup.GENERATED_BASE_MARKER, generated)
+            self.assertIn("-- >>> PYNIX-SHELL MANAGED STARTUP BEGIN >>>", generated)
+            self.assertNotIn("# >>> PYNIX-SHELL MANAGED STARTUP BEGIN >>>", generated)
             self.assertIn('hl.bind("SUPER + Q", hl.dsp.exec_cmd("/usr/bin/foot"))', generated)
             self.assertIn("hyprctl dispatch 'hl.dsp.exit()'", generated)
             self.assertIn('hl.on("hyprland.start", function()', generated)
@@ -348,7 +350,7 @@ class HyprlandStartupTests(unittest.TestCase):
             hyprland_startup.install(config, self.launcher, self.backups)
             integrated = config.read_text(encoding="utf-8")
             self.assertIn("exec-once =", integrated)
-            self.assertEqual(integrated.count(hyprland_startup.BEGIN), 1)
+            self.assertEqual(integrated.count(hyprland_startup.BEGIN_HYPRLANG), 1)
             hyprland_startup.remove(config)
         self.assertEqual(config.read_text(encoding="utf-8"), original)
 
@@ -360,7 +362,7 @@ class HyprlandStartupTests(unittest.TestCase):
         with which_patch, run_patch:
             hyprland_startup.install(config, self.launcher, self.backups, keybindings=True)
             integrated = config.read_text(encoding="utf-8")
-            self.assertIn("# pynix-keybindings: 1", integrated)
+            self.assertIn("-- pynix-keybindings: 1", integrated)
             self.assertIn('hl.bind("SUPER + F10", hl.dsp.exec_cmd(', integrated)
             self.assertIn("open-control-center", integrated)
             self.assertIn("close-control-center", integrated)

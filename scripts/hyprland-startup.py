@@ -15,8 +15,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-BEGIN = "# >>> PYNIX-SHELL MANAGED STARTUP BEGIN >>>"
-END = "# <<< PYNIX-SHELL MANAGED STARTUP END <<<"
+BEGIN = "-- >>> PYNIX-SHELL MANAGED STARTUP BEGIN >>>"
+END = "-- <<< PYNIX-SHELL MANAGED STARTUP END <<<"
+BEGIN_HYPRLANG = "# >>> PYNIX-SHELL MANAGED STARTUP BEGIN >>>"
+END_HYPRLANG = "# <<< PYNIX-SHELL MANAGED STARTUP END <<<"
 GENERATED_BASE_MARKER = "PYNIX-SHELL-GENERATED-HYPRLAND-BASE-V1"
 GENERATED_STARTER_BINDING = "SUPER"
 KEYBINDINGS = (
@@ -299,6 +301,12 @@ def _lua_string(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def marker_pair(fmt: str) -> tuple[str, str]:
+    if fmt == "lua":
+        return (BEGIN, END)
+    return (BEGIN_HYPRLANG, END_HYPRLANG)
+
+
 def block_for(
     fmt: str,
     launcher: Path,
@@ -307,10 +315,12 @@ def block_for(
     keybindings: bool = False,
 ) -> str:
     helper = launcher.parent / "pynix-ipc.sh"
+    begin, end = marker_pair(fmt)
+    comment_prefix = "--" if fmt == "lua" else "#"
     lines = [
-        BEGIN,
-        f"# pynix-added-leading-newline: {1 if added_newline else 0}",
-        f"# pynix-keybindings: {1 if keybindings else 0}",
+        begin,
+        f"{comment_prefix} pynix-added-leading-newline: {1 if added_newline else 0}",
+        f"{comment_prefix} pynix-keybindings: {1 if keybindings else 0}",
     ]
     if fmt == "lua":
         command = _lua_string(shlex.quote(str(launcher)))
@@ -332,7 +342,7 @@ def block_for(
             command = shlex.quote(str(helper))
             for modifiers, key, action in KEYBINDINGS:
                 lines.append(f"bind = {modifiers}, {key}, exec, {command} {action}")
-    lines.append(END)
+    lines.append(end)
     return eol.join(lines)
 
 
@@ -405,7 +415,8 @@ def install(
     version = hyprland_version()
     verify_version_compatibility(fmt, version)
 
-    begin_count, end_count = original_text.count(BEGIN), original_text.count(END)
+    begin_marker, end_marker = marker_pair(fmt)
+    begin_count, end_count = original_text.count(begin_marker), original_text.count(end_marker)
     if begin_count != end_count or begin_count > 1:
         raise IntegrationError("Managed startup markers are incomplete or duplicated; refusing to edit config.")
 
@@ -445,37 +456,47 @@ def install(
 
 
 def remove_block(text: str, eol: str | None = None) -> tuple[str, bool]:
-    begin_count, end_count = text.count(BEGIN), text.count(END)
+    detected = None
+    for fmt in ("lua", "hyprlang"):
+        begin, end = marker_pair(fmt)
+        if begin in text or end in text:
+            detected = (fmt, begin, end)
+            break
+    if detected is None:
+        return text, False
+
+    fmt, begin, end = detected
+    begin_count, end_count = text.count(begin), text.count(end)
     if begin_count == 0 and end_count == 0:
         return text, False
     if begin_count != 1 or end_count != 1:
         raise IntegrationError("Managed startup markers are incomplete or duplicated; refusing removal.")
 
-    start = text.index(BEGIN)
-    end = text.index(END, start) + len(END)
-    if text.index(END) < start:
+    start = text.index(begin)
+    end_index = text.index(end, start) + len(end)
+    if text.index(end) < start:
         raise IntegrationError("Managed startup markers are out of order; refusing removal.")
-    body = text[start:end]
+    body = text[start:end_index]
     metadata = re.search(r"pynix-added-leading-newline:\s*([01])", body)
     if not metadata:
         raise IntegrationError("Managed startup metadata is missing; refusing removal.")
     launcher_path = (config_home() / "pynix-shell" / "scripts" / "start-shell.sh").resolve()
     ending = eol or line_ending(text)
     legacy_lua = (
-        f"{BEGIN}{ending}# pynix-added-leading-newline: {metadata.group(1)}{ending}"
+        f"{begin}{ending}{'--' if fmt == 'lua' else '#'} pynix-added-leading-newline: {metadata.group(1)}{ending}"
         f'hl.on("hyprland.start", function(){ending}'
         f"    hl.exec_cmd({_lua_string(shlex.quote(str(launcher_path)))}){ending}"
-        f"end){ending}{END}"
+        f"end){ending}{end}"
     )
     legacy_hyprlang = (
-        f"{BEGIN}{ending}# pynix-added-leading-newline: {metadata.group(1)}{ending}"
-        f"exec-once = {shlex.quote(str(launcher_path))}{ending}{END}"
+        f"{begin}{ending}{'#' if fmt == 'hyprlang' else '--'} pynix-added-leading-newline: {metadata.group(1)}{ending}"
+        f"exec-once = {shlex.quote(str(launcher_path))}{ending}{end}"
     )
     valid_bodies = {legacy_lua, legacy_hyprlang}
-    for fmt in ("lua", "hyprlang"):
+    for iter_fmt in ("lua", "hyprlang"):
         for has_bindings in (False, True):
             valid_bodies.add(
-                block_for(fmt, launcher_path, ending, metadata.group(1) == "1", has_bindings)
+                block_for(iter_fmt, launcher_path, ending, metadata.group(1) == "1", has_bindings)
             )
     if body not in valid_bodies:
         raise IntegrationError("Managed startup block was modified; refusing to remove user-edited content.")
@@ -485,12 +506,12 @@ def remove_block(text: str, eol: str | None = None) -> tuple[str, bool]:
         if text[:start].endswith(ending):
             prefix_start -= len(ending)
 
-    after = text[end:]
+    after = text[end_index:]
     if after.startswith("\r\n"):
-        end += 2
+        end_index += 2
     elif after.startswith("\n"):
-        end += 1
-    return text[:prefix_start] + text[end:], True
+        end_index += 1
+    return text[:prefix_start] + text[end_index:], True
 
 
 def remove(config: Path, generated_sha256: str = "") -> None:
